@@ -1,0 +1,1020 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<!--[if IE]><meta http-equiv="X-UA-Compatible" content="IE=edge"><![endif]-->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="generator" content="Asciidoctor 1.5.7.1">
+<title>Gerrit Code Review - PolyGerrit Plugin Development</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:300,300italic,400,400italic,600,600italic%7CNoto+Serif:400,400italic,700,700italic%7CDroid+Sans+Mono:400,700">
+<link rel="stylesheet" href="./asciidoctor.css">
+</head>
+<body class="article toc2 toc-left">
+<div id="header">
+<h1>Gerrit Code Review - PolyGerrit Plugin Development</h1>
+<div class="details">
+<span id="revnumber">version v3.2.0</span>
+</div>
+<div id="toc" class="toc2">
+<div id="toctitle">Table of Contents</div>
+<ul class="sectlevel1">
+<li><a href="#loading">Plugin loading and initialization</a></li>
+<li><a href="#low-level-api-concepts">Low-level DOM API concepts</a>
+<ul class="sectlevel2">
+<li><a href="#low-level-decorating">Decorating DOM Elements</a></li>
+<li><a href="#low-level-replacing">Replacing DOM Elements</a></li>
+<li><a href="#low-level-style">Styling DOM Elements</a></li>
+</ul>
+</li>
+<li><a href="#high-level-api-concepts">High-level DOM API concepts</a></li>
+<li><a href="#low-level-api">Low-level DOM API</a>
+<ul class="sectlevel2">
+<li><a href="#_attributehelper">attributeHelper</a></li>
+<li><a href="#_eventhelper">eventHelper</a></li>
+<li><a href="#_hook">hook</a></li>
+<li><a href="#_registercustomcomponent">registerCustomComponent</a></li>
+<li><a href="#_registerdynamiccustomcomponent">registerDynamicCustomComponent</a></li>
+<li><a href="#_registerstylemodule">registerStyleModule</a></li>
+</ul>
+</li>
+<li><a href="#high-level-api">High-level API</a>
+<ul class="sectlevel2">
+<li><a href="#_admin">admin</a></li>
+<li><a href="#_changereply">changeReply</a></li>
+<li><a href="#_delete">delete</a></li>
+<li><a href="#_get">get</a></li>
+<li><a href="#_getpluginname">getPluginName</a></li>
+<li><a href="#_getserverinfo">getServerInfo</a></li>
+<li><a href="#_on">on</a></li>
+<li><a href="#_panel">panel</a></li>
+<li><a href="#_popup">popup</a></li>
+<li><a href="#_post">post</a></li>
+<li><a href="#plugin-rest-api">restApi</a></li>
+<li><a href="#plugin-repo">repo</a></li>
+<li><a href="#_put">put</a></li>
+<li><a href="#_screen">screen</a></li>
+<li><a href="#_screenurl">screenUrl</a></li>
+<li><a href="#plugin-settings">settings</a></li>
+<li><a href="#_settingsscreen">settingsScreen</a></li>
+<li><a href="#plugin-styles">styles</a></li>
+<li><a href="#_changemetadata">changeMetadata</a></li>
+<li><a href="#_theme">theme</a></li>
+<li><a href="#_url">url</a></li>
+</ul>
+</li>
+<li><a href="#deprecated-api">Deprecated APIs</a>
+<ul class="sectlevel2">
+<li><a href="#_install">install</a></li>
+<li><a href="#_onaction">onAction</a></li>
+<li><a href="#_panel_2">panel</a></li>
+<li><a href="#_settingsscreen_2">settingsScreen</a></li>
+<li><a href="#deprecated-action-context">Action Context (deprecated)</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+<div id="content">
+<div id="preamble">
+<div class="sectionbody">
+<div class="admonitionblock caution">
+<table>
+<tr>
+<td class="icon">
+<div class="title">Caution</div>
+</td>
+<td class="content">
+Work in progress. Hard hat area. Please
+<a href="https://bugs.chromium.org/p/gerrit/issues/entry?template=PolyGerrit%20plugins" class="external" target="_blank" rel="noopener">send
+feedback</a> if something&#8217;s not right.
+</td>
+</tr>
+</table>
+</div>
+<div class="paragraph">
+<p>For migrating existing GWT UI plugins, please check out the
+<a href="pg-plugin-migration.html#migration">migration guide</a>.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="loading">Plugin loading and initialization</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p><a href="js-api.html#_entry_point">Entry point</a> for the plugin and the loading method
+is based on <a href="http://w3c.github.io/webcomponents/spec/imports/" class="external" target="_blank" rel="noopener">HTML Imports</a>
+spec.</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>The plugin provides pluginname.html, and can be a standalone file or a static
+asset in a jar as a <a href="dev-plugins.html#deployment">Web UI plugin</a>.</p>
+</li>
+<li>
+<p>pluginname.html contains a <code>dom-module</code> tag with a script that uses
+<code>Gerrit.install()</code>. There should only be single <code>Gerrit.install()</code> per file.</p>
+</li>
+<li>
+<p>PolyGerrit imports pluginname.html along with all required resources defined in it
+(fonts, styles, etc).</p>
+</li>
+<li>
+<p>For standalone plugins, the entry point file is a <code>pluginname.html</code> file
+located in <code>gerrit-site/plugins</code> folder, where <code>pluginname</code> is an alphanumeric
+plugin name.</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>Note: Code examples target modern browsers (Chrome, Firefox, Safari, Edge).</p>
+</div>
+<div class="paragraph">
+<p>Here&#8217;s a recommended starter <code>myplugin.html</code>:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="prettyprint highlight"><code class="language-html" data-lang="html">&lt;dom-module id="my-plugin"&gt;
+  &lt;script&gt;
+    Gerrit.install(plugin =&gt; {
+      'use strict';
+
+      // Your code here.
+    });
+  &lt;/script&gt;
+&lt;/dom-module&gt;</code></pre>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="low-level-api-concepts">Low-level DOM API concepts</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Basically, the DOM is the API surface. Low-level API provides methods for
+decorating, replacing, and styling DOM elements exposed through a set of
+<a href="pg-plugin-endpoints.html">endpoints</a>.</p>
+</div>
+<div class="paragraph">
+<p>PolyGerrit provides a simple way for accessing the DOM via DOM hooks API. A DOM
+hook is a custom element that is instantiated for the plugin endpoint. In the
+decoration case, a hook is set with a <code>content</code> attribute that points to the DOM
+element.</p>
+</div>
+<div class="olist arabic">
+<ol class="arabic">
+<li>
+<p>Get the DOM hook API instance via <code>plugin.hook(endpointName)</code></p>
+</li>
+<li>
+<p>Set up an <code>onAttached</code> callback</p>
+</li>
+<li>
+<p>Callback is called when the hook element is created and inserted into DOM</p>
+</li>
+<li>
+<p>Use element.content to get UI element</p>
+</li>
+</ol>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="prettyprint highlight"><code class="language-js" data-lang="js">Gerrit.install(plugin =&gt; {
+  const domHook = plugin.hook('reply-text');
+  domHook.onAttached(element =&gt; {
+    if (!element.content) { return; }
+    // element.content is a reply dialog text area.
+  });
+});</code></pre>
+</div>
+</div>
+<div class="sect2">
+<h3 id="low-level-decorating">Decorating DOM Elements</h3>
+<div class="paragraph">
+<p>For each endpoint, PolyGerrit provides a list of DOM properties (such as
+attributes and events) that are supported in the long-term.</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="prettyprint highlight"><code class="language-js" data-lang="js">Gerrit.install(plugin =&gt; {
+  const domHook = plugin.hook('reply-text');
+  domHook.onAttached(element =&gt; {
+    if (!element.content) { return; }
+    element.content.style.border = '1px red dashed';
+  });
+});</code></pre>
+</div>
+</div>
+</div>
+<div class="sect2">
+<h3 id="low-level-replacing">Replacing DOM Elements</h3>
+<div class="paragraph">
+<p>An endpoint&#8217;s contents can be replaced by passing the replace attribute as an
+option.</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="prettyprint highlight"><code class="language-js" data-lang="js">Gerrit.install(plugin =&gt; {
+  const domHook = plugin.hook('header-title', {replace: true});
+  domHook.onAttached(element =&gt; {
+    element.appendChild(document.createElement('my-site-header'));
+  });
+});</code></pre>
+</div>
+</div>
+</div>
+<div class="sect2">
+<h3 id="low-level-style">Styling DOM Elements</h3>
+<div class="paragraph">
+<p>A plugin may provide Polymer&#8217;s
+<a href="https://www.polymer-project.org/2.0/docs/devguide/style-shadow-dom#style-modules" class="external" target="_blank" rel="noopener">style
+modules</a> to style individual endpoints using
+<code>plugin.registerStyleModule(endpointName, moduleName)</code>. A style must be defined
+as a standalone <code>&lt;dom-module&gt;</code> defined in the same .html file.</p>
+</div>
+<div class="paragraph">
+<p>Note: TODO: Insert link to the full styling API.</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="prettyprint highlight"><code class="language-html" data-lang="html">&lt;dom-module id="my-plugin"&gt;
+  &lt;script&gt;
+    Gerrit.install(plugin =&gt; {
+      plugin.registerStyleModule('change-metadata', 'some-style-module');
+    });
+  &lt;/script&gt;
+&lt;/dom-module&gt;
+
+&lt;dom-module id="some-style-module"&gt;
+  &lt;style&gt;
+    html {
+      --change-metadata-label-status: {
+        display: none;
+      }
+      --change-metadata-strategy: {
+        display: none;
+      }
+    }
+  &lt;/style&gt;
+&lt;/dom-module&gt;</code></pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="high-level-api-concepts">High-level DOM API concepts</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>High level API is based on low-level DOM API and is essentially a standardized
+way for doing common tasks. It&#8217;s less flexible, but will be a bit more stable.</p>
+</div>
+<div class="paragraph">
+<p>The common way to access high-level API is through <code>plugin</code> instance passed
+into setup callback parameter of <code>Gerrit.install()</code>, also sometimes referred to
+as <code>self</code>.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="low-level-api">Low-level DOM API</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>The low-level DOM API methods are the base of all UI customization.</p>
+</div>
+<div class="sect2">
+<h3 id="_attributehelper">attributeHelper</h3>
+<div class="paragraph">
+<p><code>plugin.attributeHelper(element)</code></p>
+</div>
+<div class="paragraph">
+<p>Alternative for
+<a href="https://www.polymer-project.org/1.0/docs/devguide/data-binding" class="external" target="_blank" rel="noopener">Polymer data</a> for plugins that don&#8217;t use Polymer. Can be used to bind element
+attribute changes to callbacks.</p>
+</div>
+<div class="paragraph">
+<p>See <code>samples/bind-parameters.html</code> for examples on both Polymer data bindings
+and <code>attibuteHelper</code> usage.</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_eventhelper">eventHelper</h3>
+<div class="paragraph">
+<p><code>plugin.eventHelper(element)</code></p>
+</div>
+<div class="paragraph">
+<p>Note: TODO</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_hook">hook</h3>
+<div class="paragraph">
+<p><code>plugin.hook(endpointName, opt_options)</code></p>
+</div>
+<div class="paragraph">
+<p>See list of supported <a href="pg-plugin-endpoints.html">endpoints</a>.</p>
+</div>
+<div class="paragraph">
+<p>Note: TODO</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_registercustomcomponent">registerCustomComponent</h3>
+<div class="paragraph">
+<p><code>plugin.registerCustomComponent(endpointName, opt_moduleName, opt_options)</code></p>
+</div>
+<div class="paragraph">
+<p>See list of supported <a href="pg-plugin-endpoints.html">endpoints</a>.</p>
+</div>
+<div class="paragraph">
+<p>Note: TODO</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_registerdynamiccustomcomponent">registerDynamicCustomComponent</h3>
+<div class="paragraph">
+<p><code>plugin.registerDynamicCustomComponent(dynamicEndpointName, opt_moduleName,
+opt_options)</code></p>
+</div>
+<div class="paragraph">
+<p>See list of supported <a href="pg-plugin-endpoints.html">endpoints</a>.</p>
+</div>
+<div class="paragraph">
+<p>Note: TODO</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_registerstylemodule">registerStyleModule</h3>
+<div class="paragraph">
+<p><code>plugin.registerStyleModule(endpointName, moduleName)</code></p>
+</div>
+<div class="paragraph">
+<p>Note: TODO</p>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="high-level-api">High-level API</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Plugin instance provides access to number of more specific APIs and methods
+to be used by plugin authors.</p>
+</div>
+<div class="sect2">
+<h3 id="_admin">admin</h3>
+<div class="paragraph">
+<p><code>plugin.admin()</code></p>
+</div>
+<div class="ulist">
+<div class="title">Params:</div>
+<ul>
+<li>
+<p>none</p>
+</li>
+</ul>
+</div>
+<div class="ulist">
+<div class="title">Returns:</div>
+<ul>
+<li>
+<p>Instance of <a href="pg-plugin-admin-api.html">GrAdminApi</a>.</p>
+</li>
+</ul>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_changereply">changeReply</h3>
+<div class="paragraph">
+<p><code>plugin.changeReply()</code></p>
+</div>
+<div class="paragraph">
+<p>Note: TODO</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_delete">delete</h3>
+<div class="paragraph">
+<p><code>plugin.delete(url, opt_callback)</code></p>
+</div>
+<div class="paragraph">
+<p>Note: TODO</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_get">get</h3>
+<div class="paragraph">
+<p><code>plugin.get(url, opt_callback)</code></p>
+</div>
+<div class="paragraph">
+<p>Note: TODO</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_getpluginname">getPluginName</h3>
+<div class="paragraph">
+<p><code>plugin.getPluginName()</code></p>
+</div>
+<div class="paragraph">
+<p>Note: TODO</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_getserverinfo">getServerInfo</h3>
+<div class="paragraph">
+<p><code>plugin.getServerInfo()</code></p>
+</div>
+<div class="paragraph">
+<p>Note: TODO</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_on">on</h3>
+<div class="paragraph">
+<p><code>plugin.on(eventName, callback)</code></p>
+</div>
+<div class="paragraph">
+<p>Note: TODO</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_panel">panel</h3>
+<div class="paragraph">
+<p><code>plugin.panel(extensionpoint, callback)</code></p>
+</div>
+<div class="paragraph">
+<p>Deprecated. Use <code>plugin.registerCustomComponent()</code> instead.</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="prettyprint highlight"><code class="language-js" data-lang="js">Gerrit.install(function(self) {
+  self.panel('CHANGE_SCREEN_BELOW_COMMIT_INFO_BLOCK', function(context) {
+    context.body.innerHTML =
+      'Sample link: &lt;a href="http://some.com/foo"&gt;Foo&lt;/a&gt;';
+    context.show();
+  });
+});</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Here&#8217;s the recommended approach that uses Polymer for generating custom elements:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="prettyprint highlight"><code class="language-html" data-lang="html">&lt;dom-module id="some-plugin"&gt;
+  &lt;script&gt;
+    Gerrit.install(plugin =&gt; {
+      plugin.registerCustomComponent(
+        'change-view-integration', 'some-ci-module');
+    });
+  &lt;/script&gt;
+&lt;/dom-module&gt;
+
+&lt;dom-module id="some-ci-module"&gt;
+  &lt;template&gt;
+    Sample link: &lt;a href="http://some.com/foo"&gt;Foo&lt;/a&gt;
+  &lt;/template&gt;
+  &lt;script&gt;
+    Polymer({is: 'some-ci-module'});
+  &lt;/script&gt;
+&lt;/dom-module&gt;</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Here&#8217;s a minimal example that uses low-level DOM Hooks API for the same purpose:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="prettyprint highlight"><code class="language-js" data-lang="js">Gerrit.install(plugin =&gt; {
+  plugin.hook('change-view-integration', el =&gt; {
+    el.innerHTML = 'Sample link: &lt;a href="http://some.com/foo"&gt;Foo&lt;/a&gt;';
+  });
+});</code></pre>
+</div>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_popup">popup</h3>
+<div class="paragraph">
+<p><code>plugin.popup(moduleName)</code></p>
+</div>
+<div class="paragraph">
+<p>Note: TODO</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_post">post</h3>
+<div class="paragraph">
+<p><code>plugin.post(url, payload, opt_callback)</code></p>
+</div>
+<div class="paragraph">
+<p>Note: TODO</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="plugin-rest-api">restApi</h3>
+<div class="paragraph">
+<p><code>plugin.restApi(opt_prefix)</code></p>
+</div>
+<div class="ulist">
+<div class="title">Params:</div>
+<ul>
+<li>
+<p>(optional) URL prefix, for easy switching into plugin URL space,
+e.g. <code>changes/1/revisions/1/cookbook~say-hello</code></p>
+</li>
+</ul>
+</div>
+<div class="ulist">
+<div class="title">Returns:</div>
+<ul>
+<li>
+<p>Instance of <a href="pg-plugin-rest-api.html">GrPluginRestApi</a>.</p>
+</li>
+</ul>
+</div>
+</div>
+<div class="sect2">
+<h3 id="plugin-repo">repo</h3>
+<div class="paragraph">
+<p><code>plugin.repo()</code></p>
+</div>
+<div class="ulist">
+<div class="title">Params:</div>
+<ul>
+<li>
+<p>none</p>
+</li>
+</ul>
+</div>
+<div class="ulist">
+<div class="title">Returns:</div>
+<ul>
+<li>
+<p>Instance of <a href="pg-plugin-repo-api.html">GrRepoApi</a>.</p>
+</li>
+</ul>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_put">put</h3>
+<div class="paragraph">
+<p><code>plugin.put(url, payload, opt_callback)</code></p>
+</div>
+<div class="paragraph">
+<p>Note: TODO</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_screen">screen</h3>
+<div class="paragraph">
+<p><code>plugin.screen(screenName, opt_moduleName)</code></p>
+</div>
+<div class="ulist">
+<div class="title">Params:</div>
+<ul>
+<li>
+<p><code><strong>string</strong> screenName</code> URL path fragment of the screen, e.g.
+<code>/x/pluginname/<strong>screenname</strong></code></p>
+</li>
+<li>
+<p><code><strong>string</strong> opt_moduleName</code> (Optional) Web component to be instantiated for this
+screen.</p>
+</li>
+</ul>
+</div>
+<div class="ulist">
+<div class="title">Returns:</div>
+<ul>
+<li>
+<p>Instance of GrDomHook.</p>
+</li>
+</ul>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_screenurl">screenUrl</h3>
+<div class="paragraph">
+<p><code>plugin.url(opt_screenName)</code></p>
+</div>
+<div class="ulist">
+<div class="title">Params:</div>
+<ul>
+<li>
+<p><code><strong>string</strong> screenName</code> (optional) URL path fragment of the screen, e.g.
+<code>/x/pluginname/<strong>screenname</strong></code></p>
+</li>
+</ul>
+</div>
+<div class="ulist">
+<div class="title">Returns:</div>
+<ul>
+<li>
+<p>Absolute URL for the screen, e.g. <code><a href="http://localhost/base/x/pluginname/screenname" class="bare">http://localhost/base/x/pluginname/screenname</a></code></p>
+</li>
+</ul>
+</div>
+</div>
+<div class="sect2">
+<h3 id="plugin-settings">settings</h3>
+<div class="paragraph">
+<p><code>plugin.settings()</code></p>
+</div>
+<div class="ulist">
+<div class="title">Params:</div>
+<ul>
+<li>
+<p>none</p>
+</li>
+</ul>
+</div>
+<div class="ulist">
+<div class="title">Returns:</div>
+<ul>
+<li>
+<p>Instance of <a href="pg-plugin-settings-api.html">GrSettingsApi</a>.</p>
+</li>
+</ul>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_settingsscreen">settingsScreen</h3>
+<div class="paragraph">
+<p><code>plugin.settingsScreen(path, menu, callback)</code></p>
+</div>
+<div class="paragraph">
+<p>Deprecated. Use <a href="#plugin-settings"><code>plugin.settings()</code></a> instead.</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="plugin-styles">styles</h3>
+<div class="paragraph">
+<p><code>plugin.styles()</code></p>
+</div>
+<div class="ulist">
+<div class="title">Params:</div>
+<ul>
+<li>
+<p>none</p>
+</li>
+</ul>
+</div>
+<div class="ulist">
+<div class="title">Returns:</div>
+<ul>
+<li>
+<p>Instance of <a href="pg-plugin-styles-api.html">GrStylesApi</a></p>
+</li>
+</ul>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_changemetadata">changeMetadata</h3>
+<div class="paragraph">
+<p><code>plugin.changeMetadata()</code></p>
+</div>
+<div class="ulist">
+<div class="title">Params:</div>
+<ul>
+<li>
+<p>none</p>
+</li>
+</ul>
+</div>
+<div class="ulist">
+<div class="title">Returns:</div>
+<ul>
+<li>
+<p>Instance of <a href="pg-plugin-change-metadata-api.html">GrChangeMetadataApi</a>.</p>
+</li>
+</ul>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_theme">theme</h3>
+<div class="paragraph">
+<p><code>plugin.theme()</code></p>
+</div>
+<div class="paragraph">
+<p>Note: TODO</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_url">url</h3>
+<div class="paragraph">
+<p><code>plugin.url(opt_path)</code></p>
+</div>
+<div class="paragraph">
+<p>Note: TODO</p>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="deprecated-api">Deprecated APIs</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Some of the deprecated APIs have limited implementation in PolyGerrit to serve
+as a "stepping stone" to allow gradual migration.</p>
+</div>
+<div class="sect2">
+<h3 id="_install">install</h3>
+<div class="paragraph">
+<p><code>plugin.deprecated.install()</code></p>
+</div>
+<div class="ulist">
+<div class="title">Params:</div>
+<ul>
+<li>
+<p>none</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>Replaces plugin APIs with a deprecated version. This allows use of deprecated
+APIs without changing JS code. For example, <code>onAction</code> is not available by
+default, and after <code>plugin.deprecated.install()</code> it&#8217;s accessible via
+<code>self.onAction()</code>.</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_onaction">onAction</h3>
+<div class="paragraph">
+<p><code>plugin.deprecated.onAction(type, view_name, callback)</code></p>
+</div>
+<div class="ulist">
+<div class="title">Params:</div>
+<ul>
+<li>
+<p><code><strong>string</strong> type</code> Action type.</p>
+</li>
+<li>
+<p><code><strong>string</strong> view_name</code> REST API action.</p>
+</li>
+<li>
+<p><code><strong>function(actionContext)</strong> callback</code> Callback invoked on action button click.</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>Adds a button to the UI with a click callback. Exact button location depends on
+parameters. Callback is triggered with an instance of
+<a href="#deprecated-action-context">action context</a>.</p>
+</div>
+<div class="paragraph">
+<p>Support is limited:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>type is either <code>change</code> or <code>revision</code>.</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>See <a href="js-api.html#self_onAction">self.onAction</a> for more info.</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_panel_2">panel</h3>
+<div class="paragraph">
+<p><code>plugin.deprecated.panel(extensionpoint, callback)</code></p>
+</div>
+<div class="ulist">
+<div class="title">Params:</div>
+<ul>
+<li>
+<p><code><strong>string</strong> extensionpoint</code></p>
+</li>
+<li>
+<p><code><strong>function(screenContext)</strong> callback</code></p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>Adds a UI DOM element and triggers a callback with context to allow direct DOM
+access.</p>
+</div>
+<div class="paragraph">
+<p>Support is limited:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>extensionpoint is one of the following:</p>
+<div class="ulist">
+<ul>
+<li>
+<p>CHANGE_SCREEN_BELOW_COMMIT_INFO_BLOCK</p>
+</li>
+<li>
+<p>CHANGE_SCREEN_BELOW_CHANGE_INFO_BLOCK</p>
+</li>
+</ul>
+</div>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>See <a href="js-api.html#self_panel">self.panel</a> for more info.</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_settingsscreen_2">settingsScreen</h3>
+<div class="paragraph">
+<p><code>plugin.deprecated.settingsScreent(path, menu, callback)</code></p>
+</div>
+<div class="ulist">
+<div class="title">Params:</div>
+<ul>
+<li>
+<p><code><strong>string</strong> path</code> URL path fragment of the screen for direct link.</p>
+</li>
+<li>
+<p><code><strong>string</strong> menu</code> Menu item title.</p>
+</li>
+<li>
+<p><code><strong>function(settingsScreenContext)</strong> callback</code></p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>Adds a settings menu item and a section in the settings screen that is provided
+to plugin for setup.</p>
+</div>
+<div class="paragraph">
+<p>See <a href="js-api.html#self_settingsScreen">self.settingsScreen</a> for more info.</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="deprecated-action-context">Action Context (deprecated)</h3>
+<div class="paragraph">
+<p>Instance of Action Context is passed to <code>onAction()</code> callback.</p>
+</div>
+<div class="paragraph">
+<p>Support is limited:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p><code>popup()</code></p>
+</li>
+<li>
+<p><code>hide()</code></p>
+</li>
+<li>
+<p><code>refresh()</code></p>
+</li>
+<li>
+<p><code>textfield()</code></p>
+</li>
+<li>
+<p><code>br()</code></p>
+</li>
+<li>
+<p><code>msg()</code></p>
+</li>
+<li>
+<p><code>div()</code></p>
+</li>
+<li>
+<p><code>button()</code></p>
+</li>
+<li>
+<p><code>checkbox()</code></p>
+</li>
+<li>
+<p><code>label()</code></p>
+</li>
+<li>
+<p><code>prependLabel()</code></p>
+</li>
+<li>
+<p><code>call()</code></p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>See <a href="js-api.html#ActionContext">Action Context</a> for more info.</p>
+</div>
+<script type="text/javascript">
+    decorate(document.getElementsByTagName('h1'));
+    decorate(document.getElementsByTagName('h2'));
+    decorate(document.getElementsByTagName('h3'));
+    decorate(document.getElementsByTagName('h4'));
+
+    var divs = document.getElementsByTagName('div');
+    var arr = new Array();
+    var excluded = getExcludedIds();
+    for(var i = 0; i < divs.length; i++) {
+      var d = divs[i];
+      var id = d.getAttribute('id');
+      if (id != null && !(id in excluded)) {
+        arr[arr.length] = d;
+      }
+    }
+    decorate(arr);
+
+    var anchors = document.getElementsByTagName('a');
+    arr = new Array();
+    for(var i = 0; i < anchors.length; i++) {
+      var a = anchors[i];
+      // if the anchor has no id there is no target to
+      // which we can link
+      if (a.getAttribute('id') != null) {
+        // if the anchor is empty there is no content which
+        // can receive the mouseover event, an empty anchor
+        // applies to the element that follows, move the
+        // element that follows into the anchor so that there
+        // is content which can receive the mouseover event
+        if (a.firstChild == null) {
+          var next = a.nextSibling;
+          if (next != null) {
+            next.parentNode.removeChild(next);
+            a.appendChild(next);
+          }
+        }
+        arr[arr.length] = a;
+      }
+    }
+    decorate(arr);
+
+    function decorate(e) {
+      for(var i = 0; i < e.length; i++) {
+        e[i].onmouseover = function (evt) {
+          var element = this;
+          // do nothing if the link icon is currently showing
+          var a = element.firstChild;
+          if (a != null && a instanceof Element
+              && a.getAttribute('id') == 'LINK') {
+            return;
+          }
+
+          // if there is no id there is no target to link to
+          var id = element.getAttribute('id');
+          if (id == null) {
+            return;
+          }
+
+          // create and show a link icon that links to this element
+          a = document.createElement('a');
+          a.setAttribute('id', 'LINK');
+          a.setAttribute('href', '#' + id);
+          a.setAttribute('style', 'position: absolute;'
+              + ' left: ' + (element.offsetLeft - 16 - 2 * 4) + 'px;'
+              + ' padding-left: 4px; padding-right: 4px;');
+          var span = document.createElement('span');
+          span.setAttribute('style', 'height: ' + element.offsetHeight + 'px;'
+              + ' display: inline-block; vertical-align: baseline;'
+              + ' font-size: 16px; text-decoration: none; color: grey;');
+          a.appendChild(span);
+          var link = document.createTextNode('🔗');
+          span.appendChild(link);
+          element.insertBefore(a, element.firstChild);
+
+          // remove the link icon when the mouse is moved away,
+          // but keep it shown if the mouse is over the element, the link or
+          // the icon
+          hide = function(evt) {
+            if (document.elementFromPoint(evt.clientX, evt.clientY) != element
+                && document.elementFromPoint(evt.clientX, evt.clientY) != a
+                && document.elementFromPoint(evt.clientX, evt.clientY) != span
+                && document.elementFromPoint(evt.clientX, evt.clientY) != link
+                && element.contains(a)) {
+              element.removeChild(a);
+            }
+          }
+          element.onmouseout = hide;
+          a.onmouseout = hide;
+          span.onmouseout = hide;
+          link.onmouseout = hide;
+        }
+      }
+    }
+
+    function getExcludedIds() {
+      var excluded = {};
+      excluded['header'] = true;
+      excluded['toc'] = true;
+      excluded['toctitle'] = true;
+      excluded['content'] = true;
+      excluded['preamble'] = true;
+      excluded['footer'] = true;
+      excluded['footer-text'] = true;
+      return excluded;
+    }
+</script>
+</div>
+</div>
+</div>
+</div>
+<div id="footer">
+<div id="footer-text">
+Version v3.2.0<br>
+</div>
+</div>
+<link rel="stylesheet" href="./prettify.min.css">
+<script src="./prettify.min.js"></script>
+<script>prettyPrint()</script>
+</body>
+</html>
