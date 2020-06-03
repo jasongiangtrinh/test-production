@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<!--[if IE]><meta http-equiv="X-UA-Compatible" content="IE=edge"><![endif]-->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="generator" content="Asciidoctor 1.5.7.1">
+<title>Gerrit Code Review - PolyGerrit Plugin Development</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:300,300italic,400,400italic,600,600italic%7CNoto+Serif:400,400italic,700,700italic%7CDroid+Sans+Mono:400,700">
+<link rel="stylesheet" href="./asciidoctor.css">
+</head>
+<body class="article toc2 toc-left">
+<div id="header">
+<h1>Gerrit Code Review - PolyGerrit Plugin Development</h1>
+<div class="details">
+<span id="revnumber">version v3.2.0</span>
+</div>
+<div id="toc" class="toc2">
+<div id="toctitle">Table of Contents</div>
+<ul class="sectlevel1">
+<li><a href="#migration">Incremental migration of existing GWT UI plugins</a>
+<ul class="sectlevel2">
+<li><a href="#_step_1_create_sampleplugin_html">Step 1: Create <code>sampleplugin.html</code></a></li>
+<li><a href="#_step_2_create_cut_off_marker_in_sampleplugin_js">Step 2: Create cut-off marker in <code>sampleplugin.js</code></a></li>
+<li><a href="#_step_3_migrate">Step 3: Migrate!</a></li>
+<li><a href="#_step_4_cleanup">Step 4: Cleanup</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+<div id="content">
+<div id="preamble">
+<div class="sectionbody">
+<div class="admonitionblock caution">
+<table>
+<tr>
+<td class="icon">
+<div class="title">Caution</div>
+</td>
+<td class="content">
+Work in progress. Hard hat area. Please
+<a href="https://bugs.chromium.org/p/gerrit/issues/entry?template=PolyGerrit%20plugins" class="external" target="_blank" rel="noopener">send
+feedback</a> if something&#8217;s not right.
+</td>
+</tr>
+</table>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="migration">Incremental migration of existing GWT UI plugins</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p><a href="pg-plugin-dev.html">PolyGerrit plugin API</a> is based on different concepts and
+provides a different type of API compared to the one available to GWT
+plugins. Depending on the plugin, it might require significant modifications to
+existing UI scripts to fully take advantage of the benefits provided by the PolyGerrit API.</p>
+</div>
+<div class="paragraph">
+<p>To make migration easier, PolyGerrit recommends an incremental migration
+strategy. Starting with a .js file that works for GWT UI, plugin author can
+incrementally migrate deprecated APIs to the new plugin API.</p>
+</div>
+<div class="paragraph">
+<p>The goal for this guide is to provide a migration path from .js-based UI script to
+a html based implementation</p>
+</div>
+<div class="admonitionblock note">
+<table>
+<tr>
+<td class="icon">
+<div class="title">Note</div>
+</td>
+<td class="content">
+Web UI plugins distributed as a single .js file are not covered in this
+guide.
+</td>
+</tr>
+</table>
+</div>
+<div class="paragraph">
+<p>Let&#8217;s start with a basic plugin that has an UI module. Commonly, file tree
+should look like this:</p>
+</div>
+<div class="literalblock">
+<div class="content">
+<pre>├── BUILD
+├── LICENSE
+└── src
+    └── main
+        ├── java
+        │   └── com
+        │       └── foo
+        │           └── SamplePluginModule.java
+        └── resources
+            └── static
+                └── sampleplugin.js</pre>
+</div>
+</div>
+<div class="paragraph">
+<p>For simplicity&#8217;s sake, let&#8217;s assume SamplePluginModule.java has following
+content:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="prettyprint highlight"><code class="language-java" data-lang="java">public class SamplePluginModule extends AbstractModule {
+
+  @Override
+  protected void configure() {
+    DynamicSet.bind(binder(), WebUiPlugin.class)
+        .toInstance(new JavaScriptPlugin("sampleplugin.js"));
+  }
+}</code></pre>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_step_1_create_sampleplugin_html">Step 1: Create <code>sampleplugin.html</code></h3>
+<div class="paragraph">
+<p>As a first step, create <code>sampleplugin.html</code> and include the UI script in the
+module file.</p>
+</div>
+<div class="admonitionblock note">
+<table>
+<tr>
+<td class="icon">
+<div class="title">Note</div>
+</td>
+<td class="content">
+GWT UI ignores html files which it doesn&#8217;t support.
+</td>
+</tr>
+</table>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="prettyprint highlight"><code class="language-java" data-lang="java">  @Override
+  protected void configure() {
+    DynamicSet.bind(binder(), WebUiPlugin.class)
+        .toInstance(new JavaScriptPlugin("sampleplugin.js"));
+    DynamicSet.bind(binder(), WebUiPlugin.class)
+        .toInstance(new JavaScriptPlugin("sampleplugin.html"));
+  }</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Here&#8217;s recommended starter code for <code>sampleplugin.html</code>:</p>
+</div>
+<div class="admonitionblock note">
+<table>
+<tr>
+<td class="icon">
+<div class="title">Note</div>
+</td>
+<td class="content">
+By specification, the <code>id</code> attribute of <code>dom-module</code> <strong>must</strong> contain a dash
+(-).
+</td>
+</tr>
+</table>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="prettyprint highlight"><code class="language-html" data-lang="html">&lt;dom-module id="sample-plugin"&gt;
+  &lt;script&gt;
+    Gerrit.install(plugin =&gt; {
+        // Setup block, is executed before sampleplugin.js
+
+        // Install deprecated JS APIs (onAction, popup, etc)
+        plugin.deprecated.install();
+    });
+  &lt;/script&gt;
+
+  &lt;script src="./sampleplugin.js"&gt;&lt;/script&gt;
+
+  &lt;script&gt;
+    Gerrit.install(plugin =&gt; {
+        // Cleanup block, is executed after sampleplugin.js
+    });
+  &lt;/script&gt;
+&lt;/dom-module&gt;</code></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Here&#8217;s how this works:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>PolyGerrit detects migration scenario because UI scripts have same filename
+and different extensions</p>
+<div class="ulist">
+<ul>
+<li>
+<p>PolyGerrit will load <code>sampleplugin.html</code> and skip <code>sampleplugin.js</code></p>
+</li>
+<li>
+<p>PolyGerrit will reuse <code>plugin</code> (aka <code>self</code>) instance for <code>Gerrit.install()</code>
+callbacks</p>
+</li>
+</ul>
+</div>
+</li>
+<li>
+<p><code>sampleplugin.js</code> is loaded since it&#8217;s referenced in <code>sampleplugin.html</code></p>
+</li>
+<li>
+<p>setup script tag code is executed before <code>sampleplugin.js</code></p>
+</li>
+<li>
+<p>cleanup script tag code is executed after <code>sampleplugin.js</code></p>
+</li>
+<li>
+<p><code>plugin.deprecated.install()</code> enables deprecated APIs (onAction(), popup(),
+etc) before <code>sampleplugin.js</code> is loaded</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>This means the plugin instance is shared between .html-based and .js-based
+code. This allows to gradually and incrementally transfer code to the new API.</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_step_2_create_cut_off_marker_in_sampleplugin_js">Step 2: Create cut-off marker in <code>sampleplugin.js</code></h3>
+<div class="paragraph">
+<p>Commonly, window.Polymer is being used to detect in GWT UI script if it&#8217;s being
+executed inside PolyGerrit. This could be used to separate code that was already
+migrated to new APIs from old not yet migrated code.</p>
+</div>
+<div class="paragraph">
+<p>During incremental migration, some of the UI code will be reimplemented using
+the PolyGerrit plugin API. However, old code still could be required for the plugin
+to work in GWT UI.</p>
+</div>
+<div class="paragraph">
+<p>To handle this case, add the following code at the end of the installation
+callback in <code>sampleplugin.js</code></p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="prettyprint highlight"><code class="language-js" data-lang="js">Gerrit.install(function(self) {
+
+  // Existing code here, not modified.
+
+  if (window.Polymer) { return; } // Cut-off marker
+
+  // Everything below was migrated to PolyGerrit plugin API.
+  // Code below is still needed for the plugin to work in GWT UI.
+});</code></pre>
+</div>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_step_3_migrate">Step 3: Migrate!</h3>
+<div class="paragraph">
+<p>The code that uses deprecated APIs should be eventually rewritten using
+non-deprecated counterparts. Duplicated pieces could be kept under cut-off
+marker to work in GWT UI.</p>
+</div>
+<div class="paragraph">
+<p>If some data or functions needs to be shared between code in .html and .js, it
+could be stored in the <code>plugin</code> (aka <code>self</code>) object that&#8217;s shared between both</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="_step_4_cleanup">Step 4: Cleanup</h3>
+<div class="paragraph">
+<p>Once deprecated APIs are migrated, <code>sampleplugin.js</code> will only contain
+duplicated code that&#8217;s required for GWT UI to work. As soon as GWT support is removed from Gerrit
+that file can be simply deleted, along with the script tag loading it.</p>
+</div>
+<script type="text/javascript">
+    decorate(document.getElementsByTagName('h1'));
+    decorate(document.getElementsByTagName('h2'));
+    decorate(document.getElementsByTagName('h3'));
+    decorate(document.getElementsByTagName('h4'));
+
+    var divs = document.getElementsByTagName('div');
+    var arr = new Array();
+    var excluded = getExcludedIds();
+    for(var i = 0; i < divs.length; i++) {
+      var d = divs[i];
+      var id = d.getAttribute('id');
+      if (id != null && !(id in excluded)) {
+        arr[arr.length] = d;
+      }
+    }
+    decorate(arr);
+
+    var anchors = document.getElementsByTagName('a');
+    arr = new Array();
+    for(var i = 0; i < anchors.length; i++) {
+      var a = anchors[i];
+      // if the anchor has no id there is no target to
+      // which we can link
+      if (a.getAttribute('id') != null) {
+        // if the anchor is empty there is no content which
+        // can receive the mouseover event, an empty anchor
+        // applies to the element that follows, move the
+        // element that follows into the anchor so that there
+        // is content which can receive the mouseover event
+        if (a.firstChild == null) {
+          var next = a.nextSibling;
+          if (next != null) {
+            next.parentNode.removeChild(next);
+            a.appendChild(next);
+          }
+        }
+        arr[arr.length] = a;
+      }
+    }
+    decorate(arr);
+
+    function decorate(e) {
+      for(var i = 0; i < e.length; i++) {
+        e[i].onmouseover = function (evt) {
+          var element = this;
+          // do nothing if the link icon is currently showing
+          var a = element.firstChild;
+          if (a != null && a instanceof Element
+              && a.getAttribute('id') == 'LINK') {
+            return;
+          }
+
+          // if there is no id there is no target to link to
+          var id = element.getAttribute('id');
+          if (id == null) {
+            return;
+          }
+
+          // create and show a link icon that links to this element
+          a = document.createElement('a');
+          a.setAttribute('id', 'LINK');
+          a.setAttribute('href', '#' + id);
+          a.setAttribute('style', 'position: absolute;'
+              + ' left: ' + (element.offsetLeft - 16 - 2 * 4) + 'px;'
+              + ' padding-left: 4px; padding-right: 4px;');
+          var span = document.createElement('span');
+          span.setAttribute('style', 'height: ' + element.offsetHeight + 'px;'
+              + ' display: inline-block; vertical-align: baseline;'
+              + ' font-size: 16px; text-decoration: none; color: grey;');
+          a.appendChild(span);
+          var link = document.createTextNode('🔗');
+          span.appendChild(link);
+          element.insertBefore(a, element.firstChild);
+
+          // remove the link icon when the mouse is moved away,
+          // but keep it shown if the mouse is over the element, the link or
+          // the icon
+          hide = function(evt) {
+            if (document.elementFromPoint(evt.clientX, evt.clientY) != element
+                && document.elementFromPoint(evt.clientX, evt.clientY) != a
+                && document.elementFromPoint(evt.clientX, evt.clientY) != span
+                && document.elementFromPoint(evt.clientX, evt.clientY) != link
+                && element.contains(a)) {
+              element.removeChild(a);
+            }
+          }
+          element.onmouseout = hide;
+          a.onmouseout = hide;
+          span.onmouseout = hide;
+          link.onmouseout = hide;
+        }
+      }
+    }
+
+    function getExcludedIds() {
+      var excluded = {};
+      excluded['header'] = true;
+      excluded['toc'] = true;
+      excluded['toctitle'] = true;
+      excluded['content'] = true;
+      excluded['preamble'] = true;
+      excluded['footer'] = true;
+      excluded['footer-text'] = true;
+      return excluded;
+    }
+</script>
+</div>
+</div>
+</div>
+</div>
+<div id="footer">
+<div id="footer-text">
+Version v3.2.0<br>
+</div>
+</div>
+<link rel="stylesheet" href="./prettify.min.css">
+<script src="./prettify.min.js"></script>
+<script>prettyPrint()</script>
+</body>
+</html>
